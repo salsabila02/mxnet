@@ -1,3 +1,5 @@
 # mxnet
 
-frameworks deeplearning for Convolutional Neural Netwrok
+Frameworks Deep Learning for Convolutional Neural Netwrok
+
+in this project i was using R software. 
