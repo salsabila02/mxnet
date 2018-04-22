@@ -1,0 +1,94 @@
+library(EBImage) 
+
+setwd("D://gareng/") 
+labelgareng <- 0  #set label of each object
+df <- data.frame()
+gareng <- list.files()   #list image in path
+#set height and width
+w<-46 
+h<-46
+gambar_size<-46*46
+for (i in 1:length(gareng))
+{
+  semuagareng <- readImage(gareng[i]) 
+  semuagareng_resized <- resize(semuagareng, w=w, h=h)    #resize all image
+  semuagareng_gray <- channel(semuagareng_resized, "gray")  #convert to greyscale
+  semuagareng_matrix <- semuagareng_gray@.Data              #get the image as a matrix
+  semuagareng_vector <- as.vector(t(semuagareng_matrix))    
+  gabunggareng=c(labelgareng,semuagareng_vector) 
+  df<-rbind(df,gabunggareng)
+  write.csv(df, "gabunggareng.csv", row.names = FALSE)
+  names(df) <- c('label', paste('pixel', c(1:gambar_size)))
+}
+display(semuagareng_gray)
+garengcsv<- read.csv("D://gareng/gabunggareng.csv")
+semarcsv<- read.csv("D://semar/gabungsemar.csv")
+petrukcsv<- read.csv("D://petruk/gabungpetruk.csv")
+bagongcsv<- read.csv("D://bagong/gabungbagong.csv")
+dim(garengcsv)
+
+library(caret) 
+
+complete_set <- rbind(garengcsv,semarcsv,petrukcsv,bagongcsv)
+training_index <- createDataPartition(complete_set$label, p = .90,times = 1)
+training_index <- unlist(training_index)
+train_set <- complete_set[training_index,]
+dim(train_set)
+test_set <- complete_set[-training_index,] 
+dim(test_set)
+train_data <- data.matrix(train_set) 
+train_x <- t(train_data[, -1]) 
+dim(train_x)
+
+train_y <- train_data[,1] 
+dim(train_y)
+train_array <- train_x
+dim(train_array)
+dim(train_array) <- c(46,46,1,ncol(train_x))
+test_data <- data.matrix(test_set)
+test_x <- t(test_set[,-1])
+dim(test_x)
+test_y <- test_set[,1]
+test_array <- test_x
+dim(test_array)
+dim(test_array) <- c(46,46,1, ncol(test_x))
+
+library(mxnet)
+
+mx_data <- mx.symbol.Variable('data')
+conv_1 <- mx.symbol.Convolution(data = mx_data, kernel = c(3, 3), num_filter = 10)
+tanh_1 <- mx.symbol.Activation(data = conv_1, act_type = "tanh")
+pool_1 <- mx.symbol.Pooling(data = tanh_1, pool_type = "max", kernel = c(2, 2), stride = c(2,2))
+conv_2 <- mx.symbol.Convolution(data = pool_1, kernel = c(3,3), num_filter = 20)
+tanh_2 <- mx.symbol.Activation(data = conv_2, act_type = "tanh")
+pool_2 <- mx.symbol.Pooling(data = tanh_2, pool_type = "max", kernel = c(2, 2),stride = c(2, 2))
+flat <- mx.symbol.Flatten(data = pool_2)
+drop1 = mx.symbol.Dropout(data=flat, p=0.1)
+fcl_1 <- mx.symbol.FullyConnected(data = drop1, num_hidden = 10)
+tanh_3 <- mx.symbol.Activation(data = fcl_1, act_type = "tanh")
+drop1 = mx.symbol.Dropout(tanh_3, p=0.1)
+fcl_2 <- mx.symbol.FullyConnected(data = drop1, num_hidden = 4)
+NN_model <- mx.symbol.SoftmaxOutput(data = fcl_2)
+
+device <- mx.cpu()
+
+NN_model <- mx.symbol.SoftmaxOutput(data = fcl_2)
+model <- mx.model.FeedForward.create(NN_model, X = train_array, y = train_y, 
+ctx = device, num.round = 100,array.batch.size = 250,optimizer = "adam",eval.metric=mx.metric.accuracy, 
+initializer = mx.init.Xavier(factor_type = "in",rnd_type = "gaussian",magnitude = 2),array.layout = "auto")
+
+mx.set.seed(100)
+
+predict_probs <- predict(model, train_array)
+predict_probs
+predicted_labels <- max.col(t(predict_probs))-1
+table(train_data[,1],predicted_labels)
+sum(diag(table(train_y, predicted_labels)))/1080
+
+predict_probs <- predict(model, test_array)
+predict_probs
+predicted_labels <- max.col(t(predict_probs))-1
+table(test_data[, 1], predicted_labels)
+sum(diag(table(test_y, predicted_labels)))/120
+
+graph.viz(NN_model)
