@@ -21,13 +21,15 @@ for (i in 1:length(gareng))
   names(df) <- c('label', paste('pixel', c(1:gambar_size)))
 }
 display(semuagareng_gray)
+
+#build dataset
 garengcsv<- read.csv("D://gareng/gabunggareng.csv")
 semarcsv<- read.csv("D://semar/gabungsemar.csv")
 petrukcsv<- read.csv("D://petruk/gabungpetruk.csv")
 bagongcsv<- read.csv("D://bagong/gabungbagong.csv")
 dim(garengcsv)
 
-library(caret) 
+library(caret)  #partition of training data
 
 complete_set <- rbind(garengcsv,semarcsv,petrukcsv,bagongcsv)
 training_index <- createDataPartition(complete_set$label, p = .90,times = 1)
@@ -54,41 +56,51 @@ dim(test_array)
 dim(test_array) <- c(46,46,1, ncol(test_x))
 
 library(mxnet)
+#training model of CNN
 
 mx_data <- mx.symbol.Variable('data')
+#1st convo layer with kernel 3x3 filter 10
 conv_1 <- mx.symbol.Convolution(data = mx_data, kernel = c(3, 3), num_filter = 10)
 tanh_1 <- mx.symbol.Activation(data = conv_1, act_type = "tanh")
 pool_1 <- mx.symbol.Pooling(data = tanh_1, pool_type = "max", kernel = c(2, 2), stride = c(2,2))
+#2nd convo layer with kernel 3x3 nd filter 20
 conv_2 <- mx.symbol.Convolution(data = pool_1, kernel = c(3,3), num_filter = 20)
 tanh_2 <- mx.symbol.Activation(data = conv_2, act_type = "tanh")
 pool_2 <- mx.symbol.Pooling(data = tanh_2, pool_type = "max", kernel = c(2, 2),stride = c(2, 2))
+#flatten the last result (1D array/vector)
 flat <- mx.symbol.Flatten(data = pool_2)
+#1st fully connected layer
 drop1 = mx.symbol.Dropout(data=flat, p=0.1)
 fcl_1 <- mx.symbol.FullyConnected(data = drop1, num_hidden = 10)
 tanh_3 <- mx.symbol.Activation(data = fcl_1, act_type = "tanh")
+#2nd fully connected layer
 drop1 = mx.symbol.Dropout(tanh_3, p=0.1)
 fcl_2 <- mx.symbol.FullyConnected(data = drop1, num_hidden = 4)
+#output
 NN_model <- mx.symbol.SoftmaxOutput(data = fcl_2)
 
+#using CPU device
 device <- mx.cpu()
 
-NN_model <- mx.symbol.SoftmaxOutput(data = fcl_2)
+mx.set.seed(100)
+
 model <- mx.model.FeedForward.create(NN_model, X = train_array, y = train_y, 
 ctx = device, num.round = 100,array.batch.size = 250,optimizer = "adam",eval.metric=mx.metric.accuracy, 
 initializer = mx.init.Xavier(factor_type = "in",rnd_type = "gaussian",magnitude = 2),array.layout = "auto")
 
-mx.set.seed(100)
-
+#test train set
 predict_probs <- predict(model, train_array)
 predict_probs
 predicted_labels <- max.col(t(predict_probs))-1
 table(train_data[,1],predicted_labels)
 sum(diag(table(train_y, predicted_labels)))/1080
 
+#test test set
 predict_probs <- predict(model, test_array)
 predict_probs
 predicted_labels <- max.col(t(predict_probs))-1
 table(test_data[, 1], predicted_labels)
 sum(diag(table(test_y, predicted_labels)))/120
 
+#visualization model
 graph.viz(NN_model)
